@@ -1,0 +1,76 @@
+name: 'Deploy via SSH'
+description: 'Deploy files to a hosting account via SSH + rsync'
+branding:
+  icon: upload-cloud
+  color: blue
+
+inputs:
+  ssh-key:
+    description: 'SSH private key for authentication'
+    required: true
+  host:
+    description: 'SSH hostname (e.g. tenant-id.example.com)'
+    required: true
+  webapp:
+    description: 'Webapp directory name under ~/apps/'
+    required: true
+  source:
+    description: 'Local directory to deploy'
+    required: false
+    default: '.'
+  exclude:
+    description: 'Space-separated list of rsync exclude patterns'
+    required: false
+    default: '.git .github node_modules'
+  run-after:
+    description: 'Commands to run on the server after deploy'
+    required: false
+    default: ''
+  build:
+    description: 'Build command to run before deploying'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup SSH key
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        echo "${{ inputs.ssh-key }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ inputs.host }} >> ~/.ssh/known_hosts 2>/dev/null
+
+    - name: Build
+      if: inputs.build != ''
+      shell: bash
+      run: ${{ inputs.build }}
+
+    - name: Deploy via rsync
+      shell: bash
+      run: |
+        EXCLUDE_ARGS=""
+        for pattern in ${{ inputs.exclude }}; do
+          EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude=$pattern"
+        done
+
+        rsync -azv --delete \
+          $EXCLUDE_ARGS \
+          -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+          ${{ inputs.source }}/ \
+          ${{ inputs.host }}:~/apps/${{ inputs.webapp }}/
+
+    - name: Run post-deploy commands
+      if: inputs.run-after != ''
+      shell: bash
+      run: |
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ inputs.host }} << 'DEPLOY_EOF'
+        ${{ inputs.run-after }}
+        DEPLOY_EOF
+
+    - name: Cleanup SSH key
+      if: always()
+      shell: bash
+      run: rm -f ~/.ssh/deploy_key
