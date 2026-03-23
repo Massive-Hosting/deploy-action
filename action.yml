@@ -11,8 +11,8 @@ inputs:
   host:
     description: 'SSH hostname (e.g. tenant-id.example.com)'
     required: true
-  webapp:
-    description: 'Webapp directory name under ~/apps/'
+  website:
+    description: 'Website directory name under ~/sites/'
     required: true
   source:
     description: 'Local directory to deploy'
@@ -60,7 +60,7 @@ runs:
           $EXCLUDE_ARGS \
           -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
           ${{ inputs.source }}/ \
-          ${{ inputs.host }}:~/apps/${{ inputs.webapp }}/
+          ${{ inputs.host }}:~/sites/${{ inputs.website }}/
 
     - name: Run post-deploy commands
       if: inputs.run-after != ''
