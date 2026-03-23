@@ -11,6 +11,10 @@ inputs:
   host:
     description: 'SSH hostname (e.g. tenant-id.example.com)'
     required: true
+  user:
+    description: 'SSH username (defaults to tenant ID extracted from host)'
+    required: false
+    default: ''
   website:
     description: 'Website directory name under ~/sites/'
     required: true
@@ -60,17 +64,29 @@ runs:
           EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude=$pattern"
         done
 
+        # Determine SSH user: explicit input, or extract tenant ID from hostname (first segment)
+        SSH_USER="${{ inputs.user }}"
+        if [ -z "$SSH_USER" ]; then
+          SSH_USER=$(echo "${{ inputs.host }}" | cut -d. -f1)
+        fi
+        SSH_TARGET="${SSH_USER}@${{ inputs.host }}"
+
         rsync -azv --delete \
           $EXCLUDE_ARGS \
           -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
           ${{ inputs.source }}/ \
-          ${{ inputs.host }}:~/sites/${{ inputs.website }}/
+          ${SSH_TARGET}:~/sites/${{ inputs.website }}/
 
     - name: Run post-deploy commands
       if: inputs.run-after != ''
       shell: bash
       run: |
-        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ inputs.host }} << 'DEPLOY_EOF'
+        SSH_USER="${{ inputs.user }}"
+        if [ -z "$SSH_USER" ]; then
+          SSH_USER=$(echo "${{ inputs.host }}" | cut -d. -f1)
+        fi
+        SSH_TARGET="${SSH_USER}@${{ inputs.host }}"
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${SSH_TARGET} << 'DEPLOY_EOF'
         ${{ inputs.run-after }}
         DEPLOY_EOF
 
